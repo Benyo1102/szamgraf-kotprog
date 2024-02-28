@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset=utf-8>
+    <title>Interstaller scene</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%
+        }
+        #leiras {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 50%;
+            text-align: left;
+            z-index: 100;
+            display:block;
+            color: yellow;
+        }
+        #infok{
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            z-index: 120;
+            color: yellow;
+        }
+    </style>
+</head>
+<body>
+<!-- A Csillagok között c. filmből vettem ki azt a jelenetet amikor Josephék kiutaznak az űrbe felfedezni egy másik bolygót -->
+<div id="leiras">
+    Név:        Imregi Bence Zsolt <br>
+    NEPTUN:     KO4F8O <br>
+    Szak:       Mérnökinformatikus <br>
+    Tanév:      2023/2024 őszi félév <br>
+</div>
+<div id="infok">
+    Információk ki-be           I/i <br>
+    Fények ki-be                1 <br>
+    Földgömb forgatása:         Nyilak <br>
+    PointLight ki-be:           P/p <br>
+    SpotLight ki-be:            S/s <br>
+    DirectionalLight ki-be:     D/d <br>
+    Űrhajó fel-le:            U/u/,J/j<br><br>
+    A mozgás megváltozik a Föld forgatásával, <br>
+    mivel koordináta rendszer alapján működik <br><br>
+    A file megnyitásakor, kattintás után 5 másodperccel<br>
+    egy hangfile-t játszik le az oldal
+
+</div>
+<script async src="./dist/es-module-shims.js"></script>
+<script type="importmap">
+    {
+        "imports": {
+            "three": "./js-r154/build/three.module.js",
+            "trackballcontrols": "./js-r154/examples/jsm/controls/TrackballControls.js",
+            "OBJLoader": "./js-r154/examples/jsm/loaders/OBJLoader.js",
+            "MTLLoader": "./js-r154/examples/jsm/loaders/MTLLoader.js"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import {TrackballControls} from 'trackballcontrols';
+    import { OBJLoader } from 'OBJLoader';
+    import { MTLLoader } from 'MTLLoader';
+
+    // Globális változók
+    let WIDTH, HEIGHT, aspectRatio;
+    let renderer;
+    let scene, camera;
+    let controls;
+    let delta;
+    let assistGeometry, assistMesh, assistMaterial, SunMesh, MoonMesh
+    let asteroids;
+    let earthMoonSystem;
+
+    loader_obj_mtl();
+
+    // Hangfájl betöltése és lejátszása 10 másodperc után
+    function playSoundAfterDelay() {
+        let sound = new Audio('assets/audio/sound.mp3');
+        sound.play();
+    }
+    setTimeout(playSoundAfterDelay, 5000); // 5 másodperces késleltetés
+
+    function loader_obj_mtl() {
+        //blender import
+        let OBJFile = 'assets/models/asteroid.obj';
+        let MTLFile = 'assets/models/asteroid.mtl';
+
+        new MTLLoader()
+            .load(MTLFile, function (materials) {
+                materials.preload();
+                new OBJLoader()
+                    .setMaterials(materials)
+                    .load(OBJFile, function (object) {
+                        asteroids = object;
+                        console.log(object);
+
+                        object.traverse(function (child) {
+                            if (child instanceof THREE.Mesh) {
+                                child.scale.set(4, 4, 4);
+                                //child.material.side = THREE.DoubleSide;
+
+                                console.log(child.material);
+                            }
+                        });
+
+                        init();
+                    });
+            });
+    }
+
+    function init() {
+        //Böngésző ablakméret lekérése és méretarány számítása
+        HEIGHT = window.innerHeight;
+        WIDTH = window.innerWidth;
+        aspectRatio = WIDTH / HEIGHT;
+
+        //Renderer létrehozása és DOM-hoz adása
+        renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setSize(WIDTH, HEIGHT);
+        renderer.setClearColor(0x000000);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        //Színtér létrehozása
+        scene = new THREE.Scene();
+
+        // Betöltött objektum színtérhez adása
+        scene.add( asteroids );
+
+        //betöltött objektum forgatása, elhelyezése
+        asteroids.rotation.x = THREE.MathUtils.degToRad(0);
+        asteroids.rotation.y = THREE.MathUtils.degToRad(0);
+        asteroids.rotation.z = THREE.MathUtils.degToRad(0);
+        asteroids.position.set(-75, 25, 14)
+        asteroids.scale.set(0.5, 0.5, 0.5)
+        asteroids.receiveShadow = true;
+        asteroids.castShadow = true;
+        scene.add(asteroids)
+
+        //Kamera létrehozása és vetítési paramétereinek beállítása
+        camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+        camera.position.set(0, 10, 80);
+        camera.lookAt(scene.position);
+
+        //Ambiens fény
+        let Ambient = new THREE.AmbientLight(0x444444);
+        scene.add(Ambient);
+
+        //Árnyék geometria torus csomó
+         assistGeometry = new THREE.TorusKnotGeometry( 2, 0.5, 100, 16 );
+         assistMaterial = new THREE.MeshPhongMaterial({color: 0x2d9500, shininess: 50, specular: 0x4dff00, side: THREE.FrontSide, wireframe: false});
+         assistMesh = new THREE.Mesh(assistGeometry, assistMaterial);
+         assistMesh.position.set(-33, -6, 20);
+         assistMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+         assistMesh.castShadow = true;
+         assistMesh.receiveShadow = false;
+         scene.add(assistMesh);
+
+        //Segéd geometria rajz
+        let egAssist = new THREE.EdgesGeometry(assistGeometry);
+        let egAssistLines = new THREE.LineSegments(egAssist, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        assistMesh.add(egAssistLines);
+
+        //Föld
+        let textureLoader4 = new THREE.TextureLoader();
+        let texture4 = textureLoader4.load('assets/texture/fold.jpg');
+        let EarthGeometry = new THREE.SphereGeometry(12,30,20);
+        let EarthMaterial = new THREE.MeshPhongMaterial();
+        EarthMaterial.map=texture4;
+        let EarthMesh = new THREE.Mesh(EarthGeometry,EarthMaterial);
+        EarthMesh.position.set(8, 18, -5);
+        EarthGeometry.castShadow=true;
+        EarthGeometry.receiveShadow=false;
+        EarthMaterial.needsUpdate =true;
+        scene.add(EarthMesh);
+
+        //Nap
+        let textureLoader3 = new THREE.TextureLoader();
+        let texture3 = textureLoader3.load('assets/texture/nap.jpg')
+        let SunGeometry = new THREE.SphereGeometry(40, 60, 40);
+        let SunMaterial = new THREE.MeshPhongMaterial({color: 0xFFA500, shininess: 50, specular: 0xffc800, side: THREE.FrontSide, wireframe: false});
+        SunMaterial.map = texture3;
+        SunMesh = new THREE.Mesh(SunGeometry, SunMaterial);
+        SunMesh.position.set(40, 40, -75);
+        SunMesh.rotation.y = THREE.MathUtils.degToRad(77.5);
+        SunMesh.castShadow = true;
+        SunMesh.receiveShadow = true;
+        scene.add(SunMesh);
+
+        //Nap éleinek kirajzolása
+        //let egSun = new THREE.EdgesGeometry(SunGeometry);
+        //let egSunLines = new THREE.LineSegments(egSun, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //SunMesh.add(egSunLines);
+
+        //Hold
+        let textureLoader2 = new THREE.TextureLoader();
+        let texture2 = textureLoader2.load('assets/texture/moonmap1k.jpg')
+        let MoonGeometry = new THREE.SphereGeometry(6, 15, 10);
+        let MoonMaterial = new THREE.MeshPhongMaterial({color: 0xF5F5DC, shininess: 50,specular: 0xfcfced,side: THREE.FrontSide, wireframe: false});
+        MoonMaterial.map = texture2;
+        MoonMesh = new THREE.Mesh(MoonGeometry, MoonMaterial);
+        MoonMesh.position.set(30, 30, -20);
+        MoonMesh.rotation.y = THREE.MathUtils.degToRad(-50);
+        MoonMesh.castShadow = true;
+        MoonMesh.receiveShadow = true;
+        scene.add(MoonMesh);
+
+        //Hold éleinek kirajzolása
+        //let egMoon = new THREE.EdgesGeometry(MoonGeometry);
+        //let egMoonLines = new THREE.LineSegments(egMoon, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //MoonMesh.add(egMoonLines);
+
+        // Föld és Hold rendszer létrehozása
+        earthMoonSystem = new THREE.Group();
+        earthMoonSystem.add(EarthMesh);
+        earthMoonSystem.add(MoonMesh);
+        scene.add(earthMoonSystem);
+
+        // A Hold pozíciójának beállítása a Földhöz képest
+        MoonMesh.position.set(30, 30, -20);
+
+        //Űrhajó teteje
+        let TopGeometry = new THREE.ConeGeometry(5, 8, 20);
+        let TopMaterial = new THREE.MeshPhongMaterial({color: 0xC0C0C0, shininess: 50, specular: 0xd6d6d6, wireframe: false});
+        let TopMesh = new THREE.Mesh(TopGeometry, TopMaterial);
+        TopMesh.position.set(-30, 12, 0);
+        TopMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        TopMesh.castShadow = true;
+        TopMesh.receiveShadow = true;
+        scene.add(TopMesh);
+
+        //űrhajó tetejének kirajzolása
+        //let egTop = new THREE.EdgesGeometry(TopGeometry);
+        //let egTopLines = new THREE.LineSegments(egTop, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //TopMesh.add(egTopLines);
+
+        //Űrhajó teste
+        let BodyGeometry = new THREE.CylinderGeometry(5, 5, 19, 20);
+        let BodyMaterial = new THREE.MeshPhongMaterial({color: 0xC0C0C0, shininess: 50, specular: 0xd6d6d6, wireframe: false});
+        let BodyMesh = new THREE.Mesh(BodyGeometry, BodyMaterial);
+        BodyMesh.position.set(-30, -1.5, 0);
+        BodyMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        BodyMesh.castShadow = true;
+        BodyMesh.receiveShadow = true;
+        scene.add(BodyMesh);
+
+        //űrhajó teestének kirajzolása
+        //let egBody = new THREE.EdgesGeometry(BodyGeometry);
+        //let egBodyLines = new THREE.LineSegments(egBody, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //BodyMesh.add(egBodyLines);
+
+        //Űrhajó hajtómű1
+        let CylinderLGeometry = new THREE.CylinderGeometry(3, 3, 10, 20);
+        let CylinderLMaterial = new THREE.MeshPhongMaterial({color: 0x808080, shininess: 50, specular: 0xd3d3d3, side: THREE.FrontSide, wireframe: false});
+        let CylinderLMesh = new THREE.Mesh(CylinderLGeometry, CylinderLMaterial);
+        CylinderLMesh.position.set(-37, -8, 0);
+        CylinderLMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        CylinderLMesh.castShadow = true;
+        CylinderLMesh.receiveShadow = true;
+        scene.add(CylinderLMesh);
+
+        //Hajtómű teestének kirajzolása
+        //let egCylinderL = new THREE.EdgesGeometry(CylinderLGeometry);
+        //let egCylinderLLines = new THREE.LineSegments(egCylinderL, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //CylinderLMesh.add(egCylinderLLines);
+
+        //Űrhajó hajtómű2
+        let CylinderRGeometry = new THREE.CylinderGeometry(3, 3, 10, 20);
+        let CylinderRMaterial = new THREE.MeshPhongMaterial({color: 0x808080, shininess: 50, specular: 0xd3d3d3, wireframe: false});
+        let CylinderRMesh = new THREE.Mesh(CylinderRGeometry, CylinderRMaterial);
+        CylinderRMesh.position.set(-23, -8, 0);
+        CylinderRMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        CylinderRMesh.castShadow = true;
+        CylinderRMesh.receiveShadow = true;
+        scene.add(CylinderRMesh);
+
+        //Hajtómű2 teestének kirajzolása
+        //let egCylinderR = new THREE.EdgesGeometry(CylinderRGeometry);
+        //let egCylinderRLines = new THREE.LineSegments(egCylinderR, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //CylinderRMesh.add(egCylinderRLines);
+
+        //Bal kúp
+        let TopLGeometry = new THREE.SphereGeometry(3, 20, 20);
+        let TopLMaterial = new THREE.MeshPhongMaterial({color: 0xA9A9A9, shininess: 50, specular: 0xe6e6e6, wireframe: false});
+        let TopLMesh = new THREE.Mesh(TopLGeometry, TopLMaterial);
+        TopLMesh.position.set(-37, -3, 0);
+        TopLMesh.rotation.y = THREE.MathUtils.degToRad(45);
+        TopLMesh.castShadow = true;
+        TopLMesh.receiveShadow = true;
+        scene.add(TopLMesh);
+
+        //Balkúp éleinek kirajzolása
+        //let egTopL = new THREE.EdgesGeometry(TopLGeometry);
+        //let egTopLLines = new THREE.LineSegments(egTopL, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //TopLMesh.add(egTopLLines);
+
+        //Jobb kúp
+        let TopRGeometry = new THREE.SphereGeometry(3, 20, 20);
+        let TopRMaterial = new THREE.MeshPhongMaterial({color: 0xA9A9A9, shininess: 50, specular: 0xe6e6e6, wireframe: false});
+        let TopRMesh = new THREE.Mesh(TopRGeometry, TopRMaterial);
+        TopRMesh.position.set(-23, -3, 0);
+        TopRMesh.rotation.y = THREE.MathUtils.degToRad(45);
+        TopRMesh.castShadow = true;
+        TopRMesh.receiveShadow = true;
+        scene.add(TopRMesh);
+
+        //Jobb kúp éleinek kirajzolása
+        //let egTopR = new THREE.EdgesGeometry(TopRGeometry);
+        //let egTopRLines = new THREE.LineSegments(egTopR, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        //TopRMesh.add(egTopRLines);
+
+        //Égés bal
+        let FireLGeometry = new THREE.ConeGeometry(2.5, 6, 20);
+        let FireLMaterial = new THREE.MeshPhongMaterial({color: 0xFF8C00, shininess: 50, specular: 0xffbc6b, wireframe: false});
+        let FireLMesh = new THREE.Mesh(FireLGeometry, FireLMaterial);
+        FireLMesh.position.set(-37, -16, 0);
+        FireLMesh.rotation.x = THREE.MathUtils.degToRad(180.0);
+        FireLMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        FireLMesh.castShadow = true;
+        FireLMesh.receiveShadow = true;
+        scene.add(FireLMesh);
+
+        //Égés bal kirajzolása
+        let egFireL = new THREE.EdgesGeometry(FireLGeometry);
+        let egFireLLines = new THREE.LineSegments(egFireL, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        FireLMesh.add(egFireLLines);
+
+        //Égés jobb
+        let FireRGeometry = new THREE.ConeGeometry(2.5, 6, 20);
+        let FireRMaterial = new THREE.MeshPhongMaterial({color: 0xFF8C00, shininess: 50, specular: 0xffbc6b, wireframe: false});
+        let FireRMesh = new THREE.Mesh(FireRGeometry, FireRMaterial);
+        FireRMesh.position.set(-23, -16, 0);
+        FireRMesh.rotation.x = THREE.MathUtils.degToRad(180.0);
+        FireRMesh.rotation.y = THREE.MathUtils.degToRad(45.0);
+        FireRMesh.castShadow = true;
+        FireRMesh.receiveShadow = true;
+        scene.add(FireRMesh);
+
+        //Égés jobb kirajzolása
+        let egFireR = new THREE.EdgesGeometry(FireRGeometry);
+        let egFireRLines = new THREE.LineSegments(egFireR, new THREE.LineBasicMaterial({color: 0x000000, linewidth: 2}));
+        FireRMesh.add(egFireRLines);
+
+        //Árnyék
+        var textureLoader = new THREE.TextureLoader();
+        var texture = textureLoader.load('assets/texture/wallpaper.jpg')
+        let BaseShadow = new THREE.PlaneGeometry(50, 100);
+        let BaseMaterial = new THREE.MeshPhongMaterial({color: 0x4ffffff, wireframe: false, side: THREE.DoubleSide});
+        BaseMaterial.map = texture;
+        let BaseMesh = new THREE.Mesh(BaseShadow, BaseMaterial);
+        BaseMesh.position.set(-20, 13, -40);
+        BaseMesh.castShadow = false;
+        BaseMesh.receiveShadow = true;
+        scene.add(BaseMesh);
+
+        //Irányfény
+        let DirectionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        DirectionalLight.position.set(60,100,0)
+        DirectionalLight.castShadow = true;
+        DirectionalLight.target = SunMesh;
+        DirectionalLight.intensity = 0.3;
+        scene.add(DirectionalLight)
+        let DirectionalLightHelper = new THREE.DirectionalLightHelper(DirectionalLight);
+        scene.add(DirectionalLightHelper)
+
+        //Reflektor
+        let SpotLight = new THREE.SpotLight(0xffffff, 5);
+        SpotLight.position.set(-40, -20, 50);
+        SpotLight.angle = Math.PI / 9;
+        SpotLight.target = BodyMesh;
+        SpotLight.penumbra = 0.8;
+        SpotLight.distance = 130;
+        SpotLight.castShadow = true;
+        scene.add(SpotLight);
+        let SpotLightHelper = new THREE.SpotLightHelper(SpotLight);
+        scene.add(SpotLightHelper);
+
+        //Pont világítás
+        let PointLight = new THREE.PointLight(0xffffff, 1, 3)
+        PointLight.position.set(20, 35, 20);
+        PointLight.angle = Math.PI / 6;
+        PointLight.distance = 60;
+        PointLight.castShadow = true;
+        scene.add(PointLight);
+        let PointLightHelper = new THREE.PointLightHelper(PointLight);
+        scene.add(PointLightHelper);
+
+        //Az ablak későbbi átméretezése esetén visszahívható függvény megadása
+        window.addEventListener('resize', handleWindowResize, false);
+
+        //Kamera vezérlés
+        controls = new TrackballControls(camera, renderer.domElement);
+        controls.rotateSpeed = 5.0;
+        controls.panSpeed = 1.0;
+
+        //Info ki-be kapcsolása
+        document.addEventListener('keydown', enableText, false);
+
+        //Infok, leiras ki-be kapcsolasa
+        function enableText(event){
+            let x=event.which;
+            let y = document.getElementById("infok");
+            let z = document.getElementById("leiras")
+            if(x===73) {
+                if (y.style.display !== "none"){
+                    y.style.display = "none";
+                    z.style.display = "none";}
+                else{
+                    y.style.display = "block";
+                    z.style.display = "block";
+                    }
+            }
+        }
+
+        //DirectionalLight ki-be kapcsolása
+        document.addEventListener('keydown', toggleDirectionalLight, false);
+        let directionalLightEnabled = true;
+        function toggleDirectionalLight(event) {
+            let keyCode = event.which;
+
+            if (keyCode === 68) {
+                if (directionalLightEnabled) {
+                    scene.remove(DirectionalLight);
+                    directionalLightEnabled = false;
+                } else {
+                    scene.add(DirectionalLight);
+                    directionalLightEnabled = true;
+                }
+            }
+        }
+
+        //Fények ki-be kapcsolása
+        document.addEventListener('keydown', toggleLights, false);
+        let lightsEnabled = true;
+        function toggleLights(event) {
+            let keyCode = event.which;
+            if (keyCode === 49) {
+                if (lightsEnabled) {
+                    scene.remove(SpotLight, PointLight, DirectionalLight, Ambient);
+                    lightsEnabled = false;
+                } else {
+                    scene.add(SpotLight, PointLight, DirectionalLight, Ambient);
+                    lightsEnabled = true;
+                }
+            }
+        }
+
+        //Föld forgatása
+        document.addEventListener('keydown', rotateEarth, false);
+        function rotateEarth(event){
+            let keyCode = event.which;
+            if (keyCode === 39){
+                EarthMesh.rotation.y+=0.3;
+            }
+            else if (keyCode=== 37){
+                EarthMesh.rotation.y-=0.3;
+            }
+            else if (keyCode===38){
+                EarthMesh.rotation.x-=0.3;
+            }
+            else if (keyCode===40){
+                EarthMesh.rotation.x+=0.3;
+            }
+        }
+
+        //Urhajo fel-le
+        document.addEventListener('keydown', urhajo, false);
+        function urhajo (event){
+            let keyCode = event.which;
+            if (keyCode === 85){
+                TopMesh.position.y++;
+                BodyMesh.position.y++;
+                CylinderLMesh.position.y++;
+                CylinderRMesh.position.y++;
+                TopLMesh.position.y++;
+                TopRMesh.position.y++;
+                FireLMesh.position.y++;
+                FireRMesh.position.y++;
+            }
+            if (keyCode=== 74){
+                TopMesh.position.y--;
+                BodyMesh.position.y--;
+                CylinderLMesh.position.y--;
+                CylinderRMesh.position.y--;
+                TopLMesh.position.y--;
+                TopRMesh.position.y--;
+                FireLMesh.position.y--;
+                FireRMesh.position.y--;
+            }
+        }
+
+        //Point fényt ki-be kapcsolása
+        document.addEventListener('keydown', togglePointLight, false);
+        let pointLightEnabled = true;
+        function togglePointLight(event) {
+            let keyCode = event.which;
+
+            if (keyCode === 80) {
+                if (pointLightEnabled) {
+                    scene.remove(PointLight);
+                    pointLightEnabled = false;
+                } else {
+                    scene.add(PointLight);
+                    pointLightEnabled = true;
+                }
+            }
+        }
+
+        //SpotLight ki-be kapcsolása
+        document.addEventListener('keydown', toggleSpotLight, false);
+        let spotLightEnabled = true;
+        function toggleSpotLight(event) {
+            let keyCode = event.which;
+
+            if (keyCode === 83) {
+                if (spotLightEnabled) {
+                    scene.remove(SpotLight);
+                    spotLightEnabled = false;
+                } else {
+                    scene.add(SpotLight);
+                    spotLightEnabled = true;
+                }
+            }
+        }
+        csillagok();
+        animate();
+    }
+
+    //csillagos háttér
+    function csillagok() {
+        let starsGeometry = new THREE.BufferGeometry();
+        let starsMaterial = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.7 });
+        let starsVertices = [];
+
+        for (let i = 0; i < 10000; i++) {
+            let x = (Math.random() - 0.5) * 2000;
+            let y = (Math.random() - 0.5) * 2000;
+            let z = (Math.random() - 0.5) * 2000;
+            starsVertices.push(x, y, z);
+        }
+
+        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+        let stars = new THREE.Points(starsGeometry, starsMaterial);
+
+        scene.add(stars);
+    }
+
+    function handleWindowResize() {
+        //Az ablak átméretezése esetén a kamera vetítési paraméterek újraszámolása
+        HEIGHT = window.innerHeight;
+        WIDTH = window.innerWidth;
+        console.log('WIDTH=' + WIDTH + '; HEIGHT=' + HEIGHT);
+        renderer.setSize(WIDTH, HEIGHT);
+        aspectRatio = WIDTH / HEIGHT;
+        camera.aspect = aspectRatio;
+        camera.updateProjectionMatrix();
+
+        render();
+    }
+
+    function animate() {
+        //Újabb képkocka rajzolásának kérése.
+        //Maximálisan 60 FPS-t biztosít a rendszer.
+        let clock = new THREE.Clock();
+        delta = clock.getDelta();
+        requestAnimationFrame(animate);
+        controls.update(delta);
+        renderer.render( scene, camera );
+
+        // Objektum elforgatási paraméterének módosítása
+        asteroids.rotation.x += 0.0005;
+        asteroids.rotation.y += 0.0005;
+
+        //Torus csomó forgás
+        assistMesh.rotation.x += 0.005;
+        assistMesh.rotation.y += 0.005;
+
+        //Nap forgás
+        SunMesh.rotation.x += -0.0005;
+        SunMesh.rotation.y += 0.0005;
+
+        //Hold forgás
+        MoonMesh.rotation.x += 0.0005;
+        MoonMesh.rotation.y += -0.0005;
+
+        // A Hold mozgatása a Föld körül
+        earthMoonSystem.rotation.y += 0.0005;
+
+        //Kameramozgás vezérlése
+        controls.update();
+
+        //Új képkocka rajzolása
+        render();
+    }
+
+    function render() {
+        //3D -> 2D vetített kép kiszámítása.
+        //scene 3D színtér képe a camera kamera szemszögéből.
+        renderer.render(scene, camera);
+    }
+</script>
+</body>
+</html>

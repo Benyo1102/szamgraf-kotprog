@@ -1,0 +1,3 @@
+A Blender modellem egy aszteroid, amihez használtam, addon-t mégpedig: Add Mesh: Extra Objects-t, Mesh: LoopTools-t
+Az aszteroidunk alapja egy Cube mesh, Amin többszörösen alkalmaztam a Bisect műveletet, majd utána a Modifiernél hozzáadtam a Subdivision surface-t, aztán véletleszerűen kiválasztva oldalakat, Subdivideoltam 4x4-es felületekre, amit utána a LoopTools-ban Circle-re váltottam, majd utána Extrude-oltam és utána pedig scaleltem. 
+Utána pedig ctrl c és ctrl v-ztem többször az aszteroidát, majd mozgattam, skáláztam
